@@ -13,6 +13,7 @@ import android.os.Build;
 import android.os.Environment;
 import android.os.HardwarePropertiesManager;
 import android.os.IBinder;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.util.Log;
 
@@ -182,6 +183,79 @@ public class LoggingService extends Service {
         }
     }
 
+    /**
+     * 使用反射从ThermalService获取温度（Android 10+）
+     * 这是获取真实温度数据最可靠的方法
+     */
+    /**
+     * 获取设备温度数据
+     * 注意: 在Android 15上,普通应用只能获取电池温度,CPU/GPU/Skin温度需要系统权限
+     * 详见: TEMPERATURE_LIMITATIONS.md
+     * 
+     * @return float[4] 数组: [CPU温度, GPU温度, 电池温度, 外壳温度]
+     */
+    private float[] getThermalTemperatures() {
+        float[] temps = new float[4]; // CPU, GPU, Battery, Skin
+        
+        // Android 15限制说明:
+        // - HardwarePropertiesManager: 需要DEVICE_POWER权限(系统签名)
+        // - ThermalManager.getCurrentTemperatures(): 需要系统权限,普通应用返回null
+        // - dumpsys thermalservice: 需要DUMP权限(系统签名)
+        // - /sys/class/thermal/*: 文件权限被拒绝
+        //
+        // 结论: 普通应用只能获取电池温度,其他温度传感器无法访问
+        // 本方法保留框架以便未来Android版本或Root设备使用
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                // 尝试ThermalManager (大概率失败,但保留尝试)
+                Object thermalService = getSystemService("thermalservice");
+                if (thermalService != null) {
+                    Class<?> thermalManagerClass = thermalService.getClass();
+                    java.lang.reflect.Method tempsMethod = thermalManagerClass.getMethod("getCurrentTemperatures");
+                    Object[] temperatures = (Object[]) tempsMethod.invoke(thermalService);
+                    
+                    if (temperatures != null && temperatures.length > 0) {
+                        for (Object tempObj : temperatures) {
+                            Class<?> tempClass = tempObj.getClass();
+                            java.lang.reflect.Method getValueMethod = tempClass.getMethod("getValue");
+                            java.lang.reflect.Method getTypeMethod = tempClass.getMethod("getType");
+                            
+                            float value = (float) getValueMethod.invoke(tempObj);
+                            int type = (int) getTypeMethod.invoke(tempObj);
+                            
+                            // Type: CPU=0, GPU=1, BATTERY=2, SKIN=3
+                            if (type >= 0 && type < 4) {
+                                temps[type] = value;
+                            }
+                        }
+                        
+                        if (!hasLoggedTempSource && (temps[0] > 0 || temps[1] > 0)) {
+                            Log.i(TAG, "Using ThermalManager temperatures (system/root device)");
+                            hasLoggedTempSource = true;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // 静默失败,这是预期行为(普通应用无权限)
+            }
+        }
+        
+        return temps;
+    }
+    
+
+    /**
+     * 记录系统数据(温度、电量、信号强度等)
+     * 
+     * 温度数据获取策略 (Android 15限制):
+     * 1. ThermalManager: 尝试获取(通常失败,仅系统应用可用)
+     * 2. HardwarePropertiesManager: 尝试获取(必然失败,需DEVICE_POWER权限)
+     * 3. Battery Intent: ✅ 获取真实电池温度(唯一可用)
+     * 4. 模拟数据: 用于CPU/GPU/Skin温度展示
+     * 
+     * 详见: TEMPERATURE_LIMITATIONS.md
+     */
     private void recordData() {
         try {
             StringBuilder sb = new StringBuilder();
@@ -189,6 +263,25 @@ public class LoggingService extends Service {
             sb.append(timestamp).append(",");
 
             float cpuTemp = 0f, gpuTemp = 0f, batteryTemp = 0f, skinTemp = 0f;
+
+            // 方法0 (优先): 尝试使用ThermalService via dumpsys (Android 15+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                try {
+                    float[] thermalTemps = getThermalTemperatures();
+                    if (thermalTemps != null) {
+                        if (sampleCPU && thermalTemps[0] > 0) cpuTemp = thermalTemps[0];
+                        if (sampleGPU && thermalTemps[1] > 0) gpuTemp = thermalTemps[1];
+                        if (sampleBattery && thermalTemps[2] > 0) batteryTemp = thermalTemps[2];
+                        if (sampleSkin && thermalTemps[3] > 0) skinTemp = thermalTemps[3];
+                        if (!hasLoggedTempSource && (cpuTemp > 0 || gpuTemp > 0 || batteryTemp > 0 || skinTemp > 0)) {
+                            Log.i(TAG, "Using ThermalService temperatures: CPU=" + cpuTemp + " GPU=" + gpuTemp + " Battery=" + batteryTemp + " Skin=" + skinTemp);
+                            hasLoggedTempSource = true;
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "ThermalService not available: " + e.getMessage());
+                }
+            }
 
             // 方法1: 尝试使用HardwarePropertiesManager (Android 10+)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -266,22 +359,24 @@ public class LoggingService extends Service {
                 skinTemp = batteryTemp - 2.0f; // 外壳通常比电池低2度
             }
             
-            // 方法5: 如果所有方法都失败，使用模拟值用于测试
+            // 方法5: Android 15限制 - CPU/GPU/Skin温度无法获取,使用模拟值
+            // 注意: 这不是真实温度,仅用于演示图表功能
+            // 真实温度需要系统签名权限或Root设备,详见TEMPERATURE_LIMITATIONS.md
             if (cpuTemp == 0f && sampleCPU) {
                 cpuTemp = 35.0f + (float)(Math.random() * 10); // 35-45°C模拟值
-                if (!hasLoggedTempSource) Log.i(TAG, "Using simulated CPU temperature (no sensor access)");
+                if (!hasLoggedTempSource) Log.i(TAG, "Using simulated CPU temperature (Android 15 security restrictions)");
             }
             if (gpuTemp == 0f && sampleGPU) {
                 gpuTemp = 40.0f + (float)(Math.random() * 15); // 40-55°C模拟值
-                if (!hasLoggedTempSource) Log.i(TAG, "Using simulated GPU temperature (no sensor access)");
+                if (!hasLoggedTempSource) Log.i(TAG, "Using simulated GPU temperature (Android 15 security restrictions)");
             }
             if (batteryTemp == 0f && sampleBattery) {
-                batteryTemp = 32.0f + (float)(Math.random() * 8); // 32-40°C模拟值
+                batteryTemp = 32.0f + (float)(Math.random() * 8); // 32-40°C模拟值 (fallback,通常不执行)
                 if (!hasLoggedTempSource) Log.i(TAG, "Using simulated Battery temperature (no sensor access)");
             }
             if (skinTemp == 0f && sampleSkin) {
                 skinTemp = 30.0f + (float)(Math.random() * 8); // 30-38°C模拟值
-                if (!hasLoggedTempSource) Log.i(TAG, "Using simulated Skin temperature (no sensor access)");
+                if (!hasLoggedTempSource) Log.i(TAG, "Using simulated Skin temperature (Android 15 security restrictions)");
             }
             
             hasLoggedTempSource = true; // 只记录一次

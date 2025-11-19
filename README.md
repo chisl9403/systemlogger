@@ -9,13 +9,15 @@ Android系统实时监控应用，支持温度监测、电池状态、系统数�
 ## 📱 功能特性
 
 ### 实时监控
-- ✅ **CPU温度监测** - 实时显示处理器温度
-- ✅ **GPU温度监测** - 显卡温度实时追踪
-- ✅ **电池温度** - 真实电池温度读取
-- ✅ **外壳温度** - 设备外壳温度监控
+- ✅ **电池温度** - 真实电池温度读取 (唯一可用的真实温度)
+- ⚠️ **CPU温度监测** - 模拟数据 (Android 15限制)
+- ⚠️ **GPU温度监测** - 模拟数据 (Android 15限制)
+- ⚠️ **外壳温度** - 模拟数据 (Android 15限制)
 - ✅ **电池电量** - 当前电量百分比
 - ✅ **电流监测** - 充放电电流显示
 - ✅ **屏幕亮度** - 当前亮度级别
+
+**温度读取限制说明**: 由于Android 15安全限制,普通应用无法访问CPU/GPU/Skin温度传感器,只能读取电池温度。其他温度数据使用合理范围的模拟值用于图表演示。详见[温度限制文档](TEMPERATURE_LIMITATIONS.md)。
 
 ### 数据可视化
 - 📊 **实时温度曲线** - 4条独立曲线同时显示
@@ -114,31 +116,66 @@ implementation 'androidx.lifecycle:lifecycle-service:2.6.2'
 implementation 'com.github.PhilJay:MPAndroidChart:v3.1.0'
 ```
 
-### 温度读取策略
+### 温度读取策略 (Android 15限制)
 
-应用采用**5层温度读取fallback机制**：
+**重要**: Android 15对普通应用的温度传感器访问实施了严格限制。详细技术分析见 [TEMPERATURE_LIMITATIONS.md](TEMPERATURE_LIMITATIONS.md)
 
-1. **HardwarePropertiesManager API** (Android 10+)
-   - 官方硬件温度API
-   - 优先使用
+应用采用**5层温度读取fallback机制**:
 
-2. **Thermal Zone文件系统**
+1. **ThermalManager.getCurrentTemperatures()** (Android 11+)
+   - 最新的官方温度API
+   - ❌ 需要系统权限,普通应用无法使用
+   - 状态: 尝试但大概率返回null
+
+2. **HardwarePropertiesManager API** (Android 10+)
+   - 硬件属性管理器
+   - ❌ 需要DEVICE_POWER权限(系统签名)
+   - 状态: 权限被拒绝
+
+3. **Thermal Zone文件系统**
    - 读取 `/sys/class/thermal/thermal_zone*/temp`
-   - 需要文件系统权限
+   - ❌ 文件权限被拒绝
+   - 状态: Permission denied
 
-3. **电池温度 Intent广播** ✅
+4. **电池温度 Intent广播** ✅
    - 通过 `ACTION_BATTERY_CHANGED` 获取
-   - 最可靠的温度源
-   - 当前主要使用方式
-
-4. **温度推算**
-   - 基于电池温度推算外壳温度
-   - 外壳温度 ≈ 电池温度 - 2°C
+   - ✅ **唯一可用的真实温度源**
+   - 状态: 正常工作,返回真实电池温度(~32-33°C)
 
 5. **模拟数据**
-   - 当所有方法失败时使用
-   - 提供合理的温度范围
-   - 用于演示和测试
+   - 当CPU/GPU/Skin温度无法获取时使用
+   - 提供合理的温度范围(CPU: 35-45°C, GPU: 40-55°C, Skin: 30-38°C)
+   - 用于图表演示功能
+   - ⚠️ **非真实数据,仅供展示**
+
+#### 为什么无法获取CPU/GPU温度?
+
+Android从版本10开始逐步限制温度传感器访问,到Android 15已经完全禁止普通应用访问CPU/GPU等温度数据,原因包括:
+- 隐私保护 (防止设备指纹识别)
+- 安全性 (防止侧信道攻击)
+- 电池优化 (减少传感器访问)
+
+只有以下方式可以获取完整温度数据:
+- 系统签名应用 (system/priv-app)
+- Root权限设备
+- 通过ADB Shell (开发调试)
+
+#### 调试方法
+
+开发者可以通过ADB查看真实温度数据:
+```bash
+# 查看所有温度传感器
+adb shell dumpsys thermalservice
+
+# 实时监控温度
+adb shell "while true; do dumpsys thermalservice | grep 'Temperature{'; sleep 1; done"
+```
+
+测试设备实测数据(Motorola edge 50 fusion, Android 15):
+- CPU: 37.4°C (真实值,仅ADB可见)
+- GPU: 37.4°C (真实值,仅ADB可见)
+- Battery: 32.0°C (应用可读取) ✅
+- Skin: 32.3°C (真实值,仅ADB可见)
 
 ## 📁 项目结构
 
@@ -219,16 +256,25 @@ gradlew.bat assembleDebug
 - 实时滚动显示
 - 支持触摸交互
 
-## 🐛 已知问题
+## 🐛 已知问题与限制
 
-1. **温度读取限制**
-   - 部分设备无法通过HardwarePropertiesManager读取温度
-   - 已实现多层fallback机制
-   - 电池温度为最可靠数据源
+1. **温度读取限制** ⚠️ **重要**
+   - **Android 15安全限制**: 普通应用无法读取CPU/GPU/Skin真实温度
+   - **仅电池温度可用**: 其他温度传感器需要系统签名权限
+   - **使用模拟数据**: CPU/GPU/Skin温度为模拟值(用于演示)
+   - **详细说明**: 参见 [TEMPERATURE_LIMITATIONS.md](TEMPERATURE_LIMITATIONS.md)
+   - **解决方案**: 
+     - Root设备可获取真实数据
+     - 系统应用可正常访问
+     - 开发者可用ADB查看真实值
 
 2. **权限要求**
    - Android 13+需要额外的通知权限
    - 首次运行需手动授权
+
+3. **设备兼容性**
+   - 部分设备可能不支持所有功能
+   - 建议在Android 15原生系统上使用
 
 ## 🔄 更新日志
 
