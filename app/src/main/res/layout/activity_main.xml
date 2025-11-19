@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="200dp">
+        <TextView
+            android:id="@+id/textViewData"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="实时数据显示"
+            android:textSize="14sp"/>
+    </ScrollView>
+
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:paddingTop="10dp">
+
+        <CheckBox
+            android:id="@+id/checkCPU"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="CPU Temp"
+            android:checked="true"/>
+        <CheckBox
+            android:id="@+id/checkGPU"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="GPU Temp"
+            android:checked="true"/>
+        <CheckBox
+            android:id="@+id/checkBattery"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Battery Temp"
+            android:checked="true"/>
+        <CheckBox
+            android:id="@+id/checkSkin"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Skin Temp"
+            android:checked="true"/>
+    </LinearLayout>
+
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:paddingTop="10dp">
+
+        <Button
+            android:id="@+id/buttonStart"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="开始记录"/>
+        <Button
+            android:id="@+id/buttonStop"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="停止记录"
+            android:layout_marginStart="20dp"/>
+        <Button
+            android:id="@+id/buttonExport"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="导出CSV"
+            android:layout_marginStart="20dp"/>
+    </LinearLayout>
+
+    <com.github.mikephil.charting.charts.LineChart
+        android:id="@+id/lineChart"
+        android:layout_width="match_parent"
+        android:layout_height="300dp"
+        android:layout_marginTop="10dp"
+        android:background="@color/white"/>
+</LinearLayout>

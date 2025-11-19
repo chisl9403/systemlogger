@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SystemLogger</string>
+    <string name="permission_request_title">需要权限</string>
+    <string name="permission_request_message">应用需要以下权限才能正常工作：\n• 通知权限\n• 存储权限\n• 前台服务权限</string>
+    <string name="permission_denied_message">权限被拒绝，应用可能无法正常工作</string>
+    <string name="start_monitoring">开始监控</string>
+    <string name="stop_monitoring">停止监控</string>
+    <string name="export_data">导出数据</string>
+    <string name="monitoring_running">系统监控运行中...</string>
+    <string name="monitoring_stopped">监控已停止</string>
+    <string name="export_success">数据导出成功</string>
+    <string name="export_failed">数据导出失败</string>
+    <string name="cpu_temp">CPU温度</string>
+    <string name="gpu_temp">GPU温度</string>
+    <string name="battery_temp">电池温度</string>
+    <string name="skin_temp">机身温度</string>
+</resources>

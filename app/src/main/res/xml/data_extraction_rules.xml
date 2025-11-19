@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules xmlns:android="http://schemas.android.com/apk/res/android">
+    <cloud-backup>
+        <exclude domain="external" path="." />
+        <exclude domain="file" path="system_log.csv" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="external" path="." />
+        <exclude domain="file" path="system_log.csv" />
+    </device-transfer>
+</data-extraction-rules>
